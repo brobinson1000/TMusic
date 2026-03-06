@@ -35,7 +35,7 @@ void clear_screen() {
 
 
 // Store Songs
-std::unordered_map<std::string, std::string> song_list;
+std::map<std::string, std::string> song_list;
 
 
 // Save
@@ -75,8 +75,7 @@ void display_songs() {
     for (auto& [name, path] : song_list) {
         std::cout << LIGHT_GRAY << tracknum++ << "\t" << name << RESET << "\n";
     }
-    std::cout << RUST << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" << RESET;
-    
+    std::cout << RUST << "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" << RESET; 
     {
         std::lock_guard<std::mutex> np_lock(now_playing_mutex);
         if(!now_playing.empty()){ 
@@ -98,7 +97,15 @@ void quit() {
 }
 
 void next() {
-    std::cout << "Next function called\n";
+    auto  it = song_list.begin();
+    if (it != song_list.end()) {
+        auto next_it = std::next(it);
+        if(next_it != song_list.end()) {
+                std::cout << next_it->first;
+        } else {
+            std::cout << it->first;
+        }
+    }
 }
 
 void download() {
@@ -115,7 +122,7 @@ void download() {
     
     {
         std::lock_guard<std::mutex> lock(song_mutex);
-        song_list[song_name] = output_path;
+        song_list[song_name] = song_name + ".mp3";
     }
 
 
@@ -174,6 +181,7 @@ void main_loop() {
                     if (cmd == 'D') download();
                     else if (cmd == 'I') selectM();
                     else if (cmd == 'Q') quit();
+                    else if (cmd == 'N') next();
                     else std::cout << "Unknown command\n";
                     user_input.clear();
                 }
