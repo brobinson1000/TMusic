@@ -79,9 +79,11 @@ void display_songs() {
     
     {
         std::lock_guard<std::mutex> np_lock(now_playing_mutex);
-        if(!now_playing.empty()){
+        if(!now_playing.empty()){ 
+            std::cout << RUST << "⏹Stop [S]   ⏮ Previous [P]   ⏭ Next [N]\n" << RESET;
             std::cout << RUST << "Now Playing: " << now_playing << RESET << "\n\n";
         } else {
+            std::cout << RUST << "⏹Stop [S]   ⏮ Previous [P]   ⏭ Next [N]\n" << RESET;
             std::cout << RUST << "Now Playing: None" << RESET << "\n\n";
         }
     }
@@ -170,7 +172,7 @@ void main_loop() {
                 if (!user_input.empty()) {
                     char cmd = toupper(user_input[0]);
                     if (cmd == 'D') download();
-                    else if (cmd == 'S') selectM();
+                    else if (cmd == 'I') selectM();
                     else if (cmd == 'Q') quit();
                     else std::cout << "Unknown command\n";
                     user_input.clear();
