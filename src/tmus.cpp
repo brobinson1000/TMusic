@@ -89,50 +89,6 @@ void display_songs() {
 
 }
 
-
-
-void quit() {
-    mpon = false;
-    std::system("pkill ffplay");
-}
-
-void next() {
-    auto  it = song_list.begin();
-    if (it != song_list.end()) {
-        auto next_it = std::next(it);
-        if(next_it != song_list.end()) {
-                std::cout << next_it->first;
-        } else {
-            std::cout << it->first;
-        }
-    }
-}
-
-void download() {
-    std::cout << "Download function called\n";
-    std::string url;
-    std::cout << "Enter URL\n";
-    std::getline(std::cin, url);
-    std::cout << "Save Song as\n";
-    std::string song_name;
-    std::getline(std::cin, song_name);
-    std::string output_path = std::string(getenv("HOME")) + "/Music/" + song_name + ".mp3";
-    std::string command = "yt-dlp -x --audio-format mp3 -o \"" + output_path + "\" --quiet --no-warnings  \"" + url + "\"";
-    std::system(command.c_str());
-    
-    {
-        std::lock_guard<std::mutex> lock(song_mutex);
-        song_list[song_name] = song_name + ".mp3";
-    }
-
-
-    save_songs();    
-
-}
-
-void pauseM() {
-}
-
 void play_song_bg(std::string& song_file) {
     std::thread t2([song_file]() {
         std::string music_dir = std::string(getenv("HOME")) + "/Music";
@@ -143,30 +99,95 @@ void play_song_bg(std::string& song_file) {
     t2.detach();
 }
 
+class Command {
+    public:
+        virtual void execute() = 0;
+        virtual ~Command() = default;
+};
 
-void selectM() {
-    std::string song_name;
-    std::cout << "Enter Track to Play\n";
-    std::getline(std::cin, song_name);
-   
-    std::lock_guard<std::mutex> lock(song_mutex);
-    auto it = song_list.find(song_name);
-    if(it != song_list.end()) {
-        play_song_bg(it->second);
-
+class DownloadCommand : public Command {
+public:
+    void execute() override {
+        std::cout << "Download function called\n";
+        std::string url;
+        std::cout << "Enter URL\n";
+        std::getline(std::cin, url);
+        std::cout << "Save Song as\n";
+        std::string song_name;
+        std::getline(std::cin, song_name);
+        std::string output_path = std::string(getenv("HOME")) + "/Music/" + song_name + ".mp3";
+        std::string command = "yt-dlp -x --audio-format mp3 -o \"" + output_path + "\" --quiet --no-warnings  \"" + url + "\"";
+        std::system(command.c_str());
+    
         {
-            std::lock_guard<std::mutex> np_lock(now_playing_mutex);
-            now_playing = song_name;
+            std::lock_guard<std::mutex> lock(song_mutex);
+            song_list[song_name] = song_name + ".mp3";
         }
-        std::cout << RUST << "PLaying: " << song_name << "\n" << RESET;
-    } else {
-        std::cout << "Song Not avaliable\n";
-    }
 
-}
+
+        save_songs();
+    }    
+
+};
+
+class PlayCommand : public Command {
+public:
+    void execute() override {
+        std::string song_name;
+        std::cout << "Enter Track to Play\n";
+        std::getline(std::cin, song_name);
+   
+        std::lock_guard<std::mutex> lock(song_mutex);
+        auto it = song_list.find(song_name);
+        if(it != song_list.end()) {
+            play_song_bg(it->second);
+
+            {
+                std::lock_guard<std::mutex> np_lock(now_playing_mutex);
+                now_playing = song_name;
+            }
+            std::cout << RUST << "PLaying: " << song_name << "\n" << RESET;
+        } else {
+            std::cout << "Song Not avaliable\n";
+        }
+    }
+};
+
+class QuitCommand : public Command {
+public:
+    void execute() override {
+        mpon = false;
+        std::system("pkill ffplay");
+    }
+};
+
+class NextCommand : public Command {
+public:
+    void execute() override {
+        std::lock_guard<std::mutex> lock(song_mutex);
+        if ( !song_list.empty()) {
+            auto it = song_list.begin();
+            auto  next_it = std::next(it);
+            if (next_it != song_list.end()) {
+                std::cout << "Next Track " << next_it->first << "\n";
+            } else {
+                std::cout << "Next Track " << it->first << "\n";
+            }
+        }
+    }
+};
+
+
+
 
 
 void main_loop() {
+    std::map<char, std::unique_ptr<Command>> command_map;
+    command_map['D'] = std::make_unique<DownloadCommand>();
+    command_map['I'] = std::make_unique<PlayCommand>();
+    command_map['Q'] = std::make_unique<QuitCommand>();
+    command_map['N'] = std::make_unique<NextCommand>();
+
     std::string user_input;
     while (mpon) {
         clear_screen();
@@ -177,21 +198,25 @@ void main_loop() {
         if (std::cin.get(c)) {
             if (c == '\n') {
                 if (!user_input.empty()) {
-                    char cmd = toupper(user_input[0]);
-                    if (cmd == 'D') download();
-                    else if (cmd == 'I') selectM();
-                    else if (cmd == 'Q') quit();
-                    else if (cmd == 'N') next();
-                    else std::cout << "Unknown command\n";
+                    char cmd = std::toupper(user_input[0]);
+                    auto it = command_map.find(cmd);
+                    if (it != command_map.end()) {
+                        it->second->execute();
+                    } else {
+                        std::cout << "Unknown command\n";
+                    }
                     user_input.clear();
                 }
             } else {
                 user_input += c;
             }
         }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
     }
 }
+
+
 
 int main() {
     load_songs();
