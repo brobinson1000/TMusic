@@ -12,6 +12,9 @@
 #include <mutex>
 #include <fstream>
 #include <atomic>
+#include <algorithm>
+#include <random>
+
 
 // Color Schemes
 const std::string RUST = "\033[38;2;222;159;104m";
@@ -165,17 +168,109 @@ class NextCommand : public Command {
 public:
     void execute() override {
         std::lock_guard<std::mutex> lock(song_mutex);
-        if ( !song_list.empty()) {
-            auto it = song_list.begin();
-            auto  next_it = std::next(it);
-            if (next_it != song_list.end()) {
-                std::cout << "Next Track " << next_it->first << "\n";
-            } else {
-                std::cout << "Next Track " << it->first << "\n";
-            }
-        }
-    }
+		
+		if(song_list.empty()) return;
+		
+		auto it = song_list.find(now_playing);
+		
+		if (it == song_list.end()) {
+			it = song_list.begin();
+		} else {
+			++it;
+			if ( it == song_list.end()) 
+				it = song_list.begin();
+		}
+
+		std::system("pkill ffplay");
+
+		play_song_bg(it->second);
+
+
+		{
+			std::lock_guard<std::mutex> np_lock(now_playing_mutex);
+            now_playing = it->first;
+		}
+	}
 };
+
+class PrevCommand : public Command {
+public:
+    void execute() override {
+        std::lock_guard<std::mutex> lock(song_mutex);
+		
+		if(song_list.empty()) return;
+		
+		auto it = song_list.find(now_playing);
+		
+		if (it == song_list.end()) {
+			it = song_list.begin();
+		} else {
+			--it;
+			if ( it == song_list.end()) 
+				it = song_list.begin();
+		}
+
+		std::system("pkill ffplay");
+
+		play_song_bg(it->second);
+
+
+		{
+			std::lock_guard<std::mutex> np_lock(now_playing_mutex);
+            now_playing = it->first;
+		}
+	}
+};
+
+class ShuffCommand : public Command {
+public:
+	void execute() override {
+		std::lock_guard<std::mutex> lock(song_mutex);
+
+		if(song_list.empty()) return;
+
+		std::vector<std::pair<std::string, std::string>> shuffled;
+
+		std::string np_shuff;
+
+
+		for (auto &song : song_list)
+			shuffled.push_back(song);
+
+		std::random_device rd;
+		std::mt19937 rng(rd());
+
+		std::shuffle(shuffled.begin(), shuffled.end(), rng);
+
+		for (auto &song : shuffled) {
+			std::system("pkill ffplay");
+			np_shuff = song.second;
+			play_song_bg(np_shuff);
+		}
+
+		{
+			std::lock_guard<std::mutex> np_lock(now_playing_mutex);
+			now_playing = np_shuff;
+		}
+
+
+	}
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -187,6 +282,8 @@ void main_loop() {
     command_map['I'] = std::make_unique<PlayCommand>();
     command_map['Q'] = std::make_unique<QuitCommand>();
     command_map['N'] = std::make_unique<NextCommand>();
+	command_map['B'] = std::make_unique<PrevCommand>();
+	command_map['S'] = std::make_unique<ShuffCommand>();
 
     std::string user_input;
     while (mpon) {
